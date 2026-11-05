@@ -12,6 +12,8 @@ ContaPaso es una aplicación web interactiva que ayuda a estudiantes de primeros
 3. **Ingreso y Validación de Operaciones:** Registro de inventario inicial, compras y ventas con alertas de sobreventa en tiempo real.
 4. **Kardex Paso a Paso:** Desglose lote a lote mostrando de qué compra sale cada unidad.
 5. **Análisis Comparativo:** Comparativa simultánea de resultados e impacto financiero.
+6. **Generador de Talleres Prácticos:** Generación de ejercicios por nivel (Básico, Intermedio, Parcial Universitario) y sectores económicos.
+7. **Historial de Ejercicios (Sin Inicio de Sesión):** Almacenamiento automático y manual en el navegador del estudiante, con filtros, detalle de operaciones, recarga inmediata al taller y exportación/importación JSON.
 
 ---
 

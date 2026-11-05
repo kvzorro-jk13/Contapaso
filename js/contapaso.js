@@ -522,6 +522,7 @@ window.AppState = {
   method: 'peps',
   isInflation: true,
   currentStep: 1,
+  ultimoTitulo: 'Taller Oficial del PRD (Caso Estándar)',
   operations: [
     { id: 1, tipo: 'inicial', fecha: '01/Nov', detalle: 'Inventario Inicial', cantidad: 100, costoUnitario: 10000 },
     { id: 2, tipo: 'compra', fecha: '03/Nov', detalle: 'Compra Factura #01', cantidad: 50, costoUnitario: 12000 },
@@ -564,8 +565,14 @@ window.goToStep = function(stepNumber) {
     window.checkStockValidation();
   } else if (stepNumber === 3) {
     window.renderKardexView();
+    if (typeof window.guardarEjercicioActualEnHistorial === 'function') {
+      window.guardarEjercicioActualEnHistorial(false);
+    }
   } else if (stepNumber === 4) {
     window.renderComparativeView();
+    if (typeof window.guardarEjercicioActualEnHistorial === 'function') {
+      window.guardarEjercicioActualEnHistorial(false);
+    }
   }
 };
 
@@ -776,6 +783,7 @@ window.clearOperations = function() {
 };
 
 window.loadPRDExample = function() {
+  window.AppState.ultimoTitulo = 'Taller Oficial del PRD (Caso Estándar)';
   window.AppState.operations = [
     { id: 1, tipo: 'inicial', fecha: '01/Nov', detalle: 'Inventario Inicial', cantidad: 100, costoUnitario: 10000 },
     { id: 2, tipo: 'compra', fecha: '03/Nov', detalle: 'Compra Factura #01', cantidad: 50, costoUnitario: 12000 },
@@ -1047,6 +1055,9 @@ function renderPeriodicoDetails() {
 window.switchKardexMethod = function(newMethod) {
   window.AppState.method = newMethod;
   window.renderKardexView();
+  if (typeof window.guardarEjercicioActualEnHistorial === 'function') {
+    window.guardarEjercicioActualEnHistorial(false);
+  }
 };
 
 // ==========================================
@@ -1150,6 +1161,7 @@ window.loadExerciseFromBank = function(exerciseId) {
   window.AppState.operations = JSON.parse(JSON.stringify(selected.operaciones));
   if (selected.metodoSugerido) window.AppState.method = selected.metodoSugerido;
   if (selected.sistema) window.AppState.system = selected.sistema;
+  window.AppState.ultimoTitulo = selected.titulo || 'Taller del Banco de Ejercicios';
 
   window.closeExerciseBankModal();
   window.selectSystem(window.AppState.system);
@@ -1319,6 +1331,7 @@ window.cargarEjercicioGeneradoAlTaller = function() {
   }
 
   window.AppState.operations = JSON.parse(JSON.stringify(window.ejercicioGeneradoActual.operaciones));
+  window.AppState.ultimoTitulo = window.ejercicioGeneradoActual.titulo || 'Taller Práctico Generado';
   window.closeGeneradorModal();
   window.goToStep(2);
 };
@@ -1349,7 +1362,421 @@ window.closeGeneradorModal = function() {
 };
 
 // ==========================================
-// 11. MODALES, TIPS Y PRESETS
+// 11. HISTORIAL DE EJERCICIOS (SIN INICIO DE SESIÓN)
+// ==========================================
+const HISTORIAL_STORAGE_KEY = 'contapaso_historial_ejercicios';
+
+function obtenerHistorial() {
+  try {
+    const raw = localStorage.getItem(HISTORIAL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error("Error al leer historial de localStorage:", e);
+    return [];
+  }
+}
+
+function guardarHistorialStorage(lista) {
+  try {
+    localStorage.setItem(HISTORIAL_STORAGE_KEY, JSON.stringify(lista));
+    if (typeof window.actualizarBadgeHistorial === 'function') {
+      window.actualizarBadgeHistorial();
+    }
+  } catch (e) {
+    console.error("Error al guardar historial en localStorage:", e);
+  }
+}
+
+window.actualizarBadgeHistorial = function() {
+  const lista = obtenerHistorial();
+  const badge = document.getElementById('history-badge-count');
+  if (badge) {
+    badge.innerText = lista.length;
+    if (lista.length > 0) {
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+  const modalCount = document.getElementById('history-modal-count-badge');
+  if (modalCount) {
+    modalCount.innerText = `${lista.length} guardados`;
+  }
+};
+
+window.guardarEjercicioActualEnHistorial = function(manual = false) {
+  if (!window.AppState.operations || window.AppState.operations.length === 0) return;
+
+  // Calculamos los totales según el sistema y método actual
+  let costoVentas = 0;
+  let inventarioFinalValor = 0;
+  let inventarioFinalUnidades = 0;
+  let totalEntradas = 0;
+  let totalSalidas = 0;
+
+  window.AppState.operations.forEach(op => {
+    const q = Number(op.cantidad) || 0;
+    if (op.tipo === 'inicial' || op.tipo === 'compra') totalEntradas += q;
+    else if (op.tipo === 'venta') totalSalidas += q;
+  });
+
+  if (window.AppState.system === 'periodico') {
+    const res = calculatePeriodico(window.AppState.operations, window.AppState.method);
+    costoVentas = res.costoVentas;
+    inventarioFinalValor = res.invFinal.valor;
+    inventarioFinalUnidades = res.invFinal.unidades;
+  } else {
+    let res;
+    if (window.AppState.method === 'peps') res = calculatePEPS(window.AppState.operations);
+    else if (window.AppState.method === 'ueps') res = calculateUEPS(window.AppState.operations);
+    else res = calculatePromedio(window.AppState.operations);
+
+    costoVentas = res.costoVentasTotal;
+    inventarioFinalValor = res.inventarioFinalValor;
+    inventarioFinalUnidades = res.inventarioFinalUnidades;
+  }
+
+  const opsStr = JSON.stringify(window.AppState.operations);
+  const historial = obtenerHistorial();
+
+  // Si el ejercicio más reciente es idéntico en operaciones, método y sistema
+  const ultimo = historial[0];
+  const esMismoEjercicio = ultimo &&
+    JSON.stringify(ultimo.operaciones) === opsStr &&
+    ultimo.metodo === window.AppState.method &&
+    ultimo.sistema === window.AppState.system;
+
+  const now = new Date();
+  const fechaLegible = now.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  if (esMismoEjercicio) {
+    ultimo.fechaISO = now.toISOString();
+    ultimo.fechaFormateada = fechaLegible;
+    ultimo.resumen = {
+      costoVentas,
+      inventarioFinalValor,
+      inventarioFinalUnidades,
+      totalEntradas,
+      totalSalidas
+    };
+    guardarHistorialStorage(historial);
+    if (manual) {
+      window.mostrarToastNotificacion("¡Taller actualizado en tu historial local!");
+    }
+    return;
+  }
+
+  // Generar título
+  let titulo = window.AppState.ultimoTitulo;
+  if (!titulo) {
+    const metodoNombre = window.AppState.method.toUpperCase();
+    const cantOps = window.AppState.operations.length;
+    titulo = `Taller ${metodoNombre} • ${cantOps} operaciones`;
+  }
+
+  const nuevoItem = {
+    id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    titulo: titulo,
+    fechaISO: now.toISOString(),
+    fechaFormateada: fechaLegible,
+    sistema: window.AppState.system,
+    metodo: window.AppState.method,
+    operaciones: JSON.parse(opsStr),
+    resumen: {
+      costoVentas,
+      inventarioFinalValor,
+      inventarioFinalUnidades,
+      totalEntradas,
+      totalSalidas
+    }
+  };
+
+  historial.unshift(nuevoItem);
+  if (historial.length > 50) historial.pop(); // Mantener los 50 más recientes
+
+  guardarHistorialStorage(historial);
+
+  if (manual) {
+    window.mostrarToastNotificacion("¡Taller guardado en tu historial local!");
+  }
+};
+
+window.cargarEjercicioDesdeHistorial = function(id) {
+  const historial = obtenerHistorial();
+  const item = historial.find(h => h.id === id);
+  if (!item) return;
+
+  window.AppState.system = item.sistema || 'permanente';
+  window.AppState.method = item.metodo || 'peps';
+  window.AppState.operations = JSON.parse(JSON.stringify(item.operaciones));
+  window.AppState.ultimoTitulo = item.titulo;
+
+  window.selectSystem(window.AppState.system);
+  window.selectMethod(window.AppState.method);
+  window.renderOperationsTable();
+  window.closeHistoryModal();
+
+  window.goToStep(3); // Vamos directamente a ver el Kardex
+  window.mostrarToastNotificacion(`Cargado: "${item.titulo}"`);
+};
+
+window.eliminarEjercicioHistorial = function(id) {
+  let historial = obtenerHistorial();
+  historial = historial.filter(h => h.id !== id);
+  guardarHistorialStorage(historial);
+  window.renderHistoryModal();
+  window.mostrarToastNotificacion("Ejercicio eliminado del historial");
+};
+
+window.limpiarTodoElHistorial = function() {
+  const historial = obtenerHistorial();
+  if (historial.length === 0) return;
+  if (confirm("¿Estás segura de que deseas vaciar todo tu historial de ejercicios? Esta acción no se puede deshacer.")) {
+    guardarHistorialStorage([]);
+    window.renderHistoryModal();
+    window.mostrarToastNotificacion("Historial vaciado correctamente");
+  }
+};
+
+window.exportarHistorialJSON = function() {
+  const historial = obtenerHistorial();
+  if (historial.length === 0) {
+    alert("No tienes ejercicios en tu historial para exportar.");
+    return;
+  }
+  const blob = new Blob([JSON.stringify(historial, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `contapaso_historial_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  window.mostrarToastNotificacion("Historial descargado en archivo JSON");
+};
+
+window.importarHistorialJSON = function(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const data = JSON.parse(evt.target.result);
+      if (Array.isArray(data)) {
+        const actual = obtenerHistorial();
+        const idsExistentes = new Set(actual.map(a => a.id));
+        const nuevos = data.filter(d => d && d.operaciones && !idsExistentes.has(d.id));
+        const combinado = [...nuevos, ...actual].slice(0, 60);
+        guardarHistorialStorage(combinado);
+        window.renderHistoryModal();
+        window.mostrarToastNotificacion(`¡Se importaron ${nuevos.length} ejercicios con éxito!`);
+      } else {
+        alert("El archivo no tiene el formato esperado de historial.");
+      }
+    } catch (err) {
+      alert("Error al leer el archivo JSON: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+};
+
+window.mostrarToastNotificacion = function(mensaje) {
+  let toast = document.getElementById('contapaso-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'contapaso-toast';
+    toast.className = "fixed bottom-5 right-5 z-[9999] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-900/95 border border-cyan-400 text-white text-xs font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(56,189,248,0.4)] backdrop-blur-xl transition-all duration-300 transform translate-y-20 opacity-0";
+    document.body.appendChild(toast);
+  }
+
+  toast.innerHTML = `
+    <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+    <span class="text-cyan-200">${mensaje}</span>
+  `;
+
+  requestAnimationFrame(() => {
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+  });
+
+  if (window._toastTimeout) clearTimeout(window._toastTimeout);
+  window._toastTimeout = setTimeout(() => {
+    toast.classList.remove('translate-y-0', 'opacity-100');
+    toast.classList.add('translate-y-20', 'opacity-0');
+  }, 3200);
+};
+
+window.renderHistoryModal = function() {
+  const container = document.getElementById('history-items-container');
+  if (!container) return;
+
+  const historial = obtenerHistorial();
+  const filtroTexto = (document.getElementById('history-search-input')?.value || '').toLowerCase().trim();
+  const filtroMetodo = (document.getElementById('history-method-filter')?.value || 'todos').toLowerCase();
+
+  let filtrados = historial.filter(item => {
+    if (filtroMetodo !== 'todos' && item.metodo !== filtroMetodo) return false;
+    if (filtroTexto) {
+      const matchTitulo = (item.titulo || '').toLowerCase().includes(filtroTexto);
+      const matchMetodo = (item.metodo || '').toLowerCase().includes(filtroTexto);
+      const matchSistema = (item.sistema || '').toLowerCase().includes(filtroTexto);
+      return matchTitulo || matchMetodo || matchSistema;
+    }
+    return true;
+  });
+
+  if (filtrados.length === 0) {
+    if (historial.length === 0) {
+      container.innerHTML = `
+        <div class="p-8 text-center flex flex-col items-center justify-center gap-3 bg-surface-container-low/60 rounded-2xl border border-slate-800">
+          <div class="w-16 h-16 rounded-2xl bg-cyan-950/40 border border-cyan-400/30 flex items-center justify-center text-cyan-300">
+            <span class="material-symbols-outlined text-[36px]">history_toggle_off</span>
+          </div>
+          <h4 class="text-base font-bold text-white">Tu historial está vacío</h4>
+          <p class="text-xs text-slate-400 max-w-md leading-relaxed">
+            Cada vez que resuelvas un ejercicio de Kardex o generes un caso nuevo, se guardará aquí automáticamente en tu navegador, sin necesidad de crear cuenta ni iniciar sesión.
+          </p>
+          <div class="flex items-center gap-2 pt-2">
+            <button onclick="closeHistoryModal(); loadPRDExample(); goToStep(3);" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-bold transition-all shadow-md active:scale-95">
+              Cargar Ejercicio Oficial del PRD
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="p-6 text-center text-xs text-slate-400 bg-surface-container-low/60 rounded-xl">
+          No se encontraron ejercicios que coincidan con tu búsqueda.
+        </div>
+      `;
+    }
+    return;
+  }
+
+  container.innerHTML = '';
+
+  filtrados.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = "rounded-2xl p-4 bg-surface-container-low/90 border border-slate-700/80 hover:border-cyan-400/50 transition-all flex flex-col gap-3 shadow-md group";
+
+    const metodoColor = item.metodo === 'peps'
+      ? 'bg-blue-950/80 text-cyan-300 border-cyan-500/40'
+      : item.metodo === 'ueps'
+      ? 'bg-purple-950/80 text-purple-300 border-purple-500/40'
+      : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40';
+
+    const metodoNombre = item.metodo === 'peps'
+      ? 'PEPS'
+      : item.metodo === 'ueps'
+      ? 'UEPS'
+      : 'Promedio';
+
+    const sistemaNombre = item.sistema === 'periodico' ? 'Inv. Periódico' : 'Kardex Permanente';
+
+    const cv = item.resumen?.costoVentas || 0;
+    const ifVal = item.resumen?.inventarioFinalValor || 0;
+    const ifUnids = item.resumen?.inventarioFinalUnidades || 0;
+    const cantOps = item.operaciones?.length || 0;
+
+    const opDetalleId = `ops-preview-${item.id}`;
+
+    card.innerHTML = `
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-2.5 py-0.5 rounded-lg border text-[11px] font-bold font-mono uppercase ${metodoColor}">
+            ${metodoNombre}
+          </span>
+          <span class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700">
+            ${sistemaNombre}
+          </span>
+          <h4 class="font-bold text-white text-sm tracking-tight">${item.titulo || 'Ejercicio de Kardex'}</h4>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <span class="material-symbols-outlined text-[15px] text-slate-500">schedule</span>
+          <span>${item.fechaFormateada || 'Reciente'}</span>
+        </div>
+      </div>
+
+      <!-- Resumen de Métricas Clave -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+        <div class="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
+          <span class="text-[10px] text-rose-300 uppercase block font-sans font-bold">Costo de Ventas:</span>
+          <span class="text-white font-bold">${formatCurrency(cv)}</span>
+        </div>
+        <div class="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
+          <span class="text-[10px] text-cyan-300 uppercase block font-sans font-bold">Inventario Final:</span>
+          <span class="text-white font-bold">${formatCurrency(ifVal)}</span>
+        </div>
+        <div class="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
+          <span class="text-[10px] text-emerald-300 uppercase block font-sans font-bold">Unidades Finales:</span>
+          <span class="text-white font-bold">${formatUnits(ifUnids)} u</span>
+        </div>
+        <div class="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
+          <span class="text-[10px] text-purple-300 uppercase block font-sans font-bold">Operaciones:</span>
+          <span class="text-white font-bold">${cantOps} registros</span>
+        </div>
+      </div>
+
+      <!-- Acordeón para ver detalle de operaciones -->
+      <div>
+        <button onclick="toggleOpsPreview('${opDetalleId}')" class="text-[11px] text-cyan-300 hover:text-cyan-200 flex items-center gap-1 font-semibold transition-colors">
+          <span class="material-symbols-outlined text-[14px]">expand_more</span>
+          <span>Ver operaciones del ejercicio (${cantOps})</span>
+        </button>
+        <div id="${opDetalleId}" class="hidden mt-2 p-2.5 rounded-xl bg-black/40 border border-slate-800 text-[11px] font-mono space-y-1">
+          ${item.operaciones.map((op, i) => `
+            <div class="flex items-center justify-between text-slate-300">
+              <span>#${i + 1} • <strong class="text-white">${op.tipo.toUpperCase()}</strong>: ${op.detalle || op.fecha}</span>
+              <span class="text-cyan-300">${op.cantidad} u ${op.tipo !== 'venta' ? '@ ' + formatCurrency(op.costoUnitario) : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Barra de Acciones -->
+      <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+        <button onclick="eliminarEjercicioHistorial('${item.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1 transition-colors" title="Eliminar de mi historial">
+          <span class="material-symbols-outlined text-[16px]">delete</span>
+          <span class="hidden sm:inline">Eliminar</span>
+        </button>
+        <button onclick="cargarEjercicioDesdeHistorial('${item.id}')" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md active:scale-95 transition-all">
+          <span class="material-symbols-outlined text-[16px]">play_arrow</span>
+          <span>Abrir y Revisar Kardex</span>
+        </button>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+};
+
+window.toggleOpsPreview = function(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('hidden');
+};
+
+window.openHistoryModal = function() {
+  const modal = document.getElementById('history-modal');
+  if (modal) modal.classList.remove('hidden');
+  window.renderHistoryModal();
+};
+
+window.closeHistoryModal = function() {
+  const modal = document.getElementById('history-modal');
+  if (modal) modal.classList.add('hidden');
+};
+
+// ==========================================
+// 12. MODALES, TIPS Y PRESETS
 // ==========================================
 const tipData = {
   perecederos: {
@@ -1470,16 +1897,18 @@ window.addEventListener('keydown', (e) => {
     window.closeFormulasModal();
     window.closeExerciseBankModal();
     window.closeGeneradorModal();
+    window.closeHistoryModal();
   }
 });
 
 // ==========================================
-// 12. INICIALIZACIÓN INMEDIATA
+// 13. INICIALIZACIÓN INMEDIATA
 // ==========================================
 function initApp() {
   window.selectSystem(window.AppState.system);
   window.selectMethod(window.AppState.method);
   window.renderOperationsTable();
+  window.actualizarBadgeHistorial();
 
   // Backdrop listeners
   const faqModal = document.getElementById('faq-modal');
@@ -1507,6 +1936,13 @@ function initApp() {
   if (genModal) {
     genModal.addEventListener('click', (e) => {
       if (e.target.id === 'generador-ejercicios-modal') window.closeGeneradorModal();
+    });
+  }
+
+  const histModal = document.getElementById('history-modal');
+  if (histModal) {
+    histModal.addEventListener('click', (e) => {
+      if (e.target.id === 'history-modal') window.closeHistoryModal();
     });
   }
 }
