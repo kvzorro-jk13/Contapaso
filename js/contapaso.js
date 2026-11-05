@@ -560,7 +560,11 @@ window.goToStep = function(stepNumber) {
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  if (stepNumber === 2) {
+  if (stepNumber === 1) {
+    if (typeof window.actualizarBadgeHistorial === 'function') {
+      window.actualizarBadgeHistorial();
+    }
+  } else if (stepNumber === 2) {
     window.renderOperationsTable();
     window.checkStockValidation();
   } else if (stepNumber === 3) {
@@ -1402,6 +1406,43 @@ window.actualizarBadgeHistorial = function() {
   if (modalCount) {
     modalCount.innerText = `${lista.length} guardados`;
   }
+
+  // Actualizar widget de historial en Paso 1 si existe
+  const step1Subtitle = document.getElementById('step1-history-subtitle');
+  const step1Recent = document.getElementById('step1-recent-history-list');
+  if (step1Subtitle) {
+    if (lista.length > 0) {
+      step1Subtitle.innerText = `Tienes ${lista.length} ejercicio(s) guardado(s) listos para repasar`;
+    } else {
+      step1Subtitle.innerText = 'Aún no has resuelto ejercicios. Resuelve uno y quedará guardado aquí.';
+    }
+  }
+  if (step1Recent) {
+    if (lista.length > 0) {
+      step1Recent.classList.remove('hidden');
+      const ultimos = lista.slice(0, 2);
+      step1Recent.innerHTML = `
+        <span class="text-[10px] uppercase font-bold text-slate-400 mt-1">Últimos resueltos para revisar:</span>
+        ${ultimos.map(ex => `
+          <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-xs">
+            <div class="flex items-center gap-1.5 truncate max-w-[220px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+              <span class="font-bold text-white truncate">${ex.titulo}</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="font-mono text-[11px] text-cyan-300 font-bold">${formatCurrency(ex.resumen?.inventarioFinalValor || 0)}</span>
+              <button onclick="cargarEjercicioDesdeHistorial('${ex.id}', 3)" class="px-2 py-0.5 rounded bg-blue-600/30 hover:bg-blue-600/60 text-cyan-200 border border-cyan-400/30 text-[10px] font-bold transition-all">
+                Revisar
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      `;
+    } else {
+      step1Recent.classList.add('hidden');
+      step1Recent.innerHTML = '';
+    }
+  }
 };
 
 window.guardarEjercicioActualEnHistorial = function(manual = false) {
@@ -1507,7 +1548,7 @@ window.guardarEjercicioActualEnHistorial = function(manual = false) {
   }
 };
 
-window.cargarEjercicioDesdeHistorial = function(id) {
+window.cargarEjercicioDesdeHistorial = function(id, targetStep = 3) {
   const historial = obtenerHistorial();
   const item = historial.find(h => h.id === id);
   if (!item) return;
@@ -1522,8 +1563,8 @@ window.cargarEjercicioDesdeHistorial = function(id) {
   window.renderOperationsTable();
   window.closeHistoryModal();
 
-  window.goToStep(3); // Vamos directamente a ver el Kardex
-  window.mostrarToastNotificacion(`Cargado: "${item.titulo}"`);
+  window.goToStep(targetStep);
+  window.mostrarToastNotificacion(`Revisando: "${item.titulo}"`);
 };
 
 window.eliminarEjercicioHistorial = function(id) {
@@ -1742,16 +1783,26 @@ window.renderHistoryModal = function() {
         </div>
       </div>
 
-      <!-- Barra de Acciones -->
-      <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
-        <button onclick="eliminarEjercicioHistorial('${item.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1 transition-colors" title="Eliminar de mi historial">
+      <!-- Barra de Acciones para Revisar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+        <button onclick="eliminarEjercicioHistorial('${item.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1 transition-colors self-start sm:self-auto" title="Eliminar de mi historial">
           <span class="material-symbols-outlined text-[16px]">delete</span>
-          <span class="hidden sm:inline">Eliminar</span>
+          <span class="text-[11px]">Eliminar</span>
         </button>
-        <button onclick="cargarEjercicioDesdeHistorial('${item.id}')" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md active:scale-95 transition-all">
-          <span class="material-symbols-outlined text-[16px]">play_arrow</span>
-          <span>Abrir y Revisar Kardex</span>
-        </button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="cargarEjercicioDesdeHistorial('${item.id}', 2)" class="px-3 py-1.5 rounded-xl bg-surface-container-high hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 transition-colors flex items-center gap-1" title="Cargar y modificar las cantidades o precios">
+            <span class="material-symbols-outlined text-[15px]">edit</span>
+            <span>Editar Datos</span>
+          </button>
+          <button onclick="cargarEjercicioDesdeHistorial('${item.id}', 4)" class="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 text-xs font-bold border border-purple-500/40 transition-colors flex items-center gap-1" title="Ver análisis comparativo multimétodo">
+            <span class="material-symbols-outlined text-[15px]">compare_arrows</span>
+            <span>Comparativa</span>
+          </button>
+          <button onclick="cargarEjercicioDesdeHistorial('${item.id}', 3)" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md active:scale-95 transition-all" title="Revisar el Kardex resuelto paso a paso">
+            <span class="material-symbols-outlined text-[16px] text-amber-300">visibility</span>
+            <span>Revisar Kardex</span>
+          </button>
+        </div>
       </div>
     `;
 
