@@ -158,6 +158,12 @@
           <span class="material-symbols-outlined text-[17px] text-amber-300">lightbulb</span>
           <span class="hidden xl:inline">Fórmulas</span>
         </button>
+
+        <!-- Cloud Sync Badge -->
+        <div id="cloud-status-badge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-mono font-bold" title="Sincronización con base de datos Cloud Firestore">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-emerald-300">Firestore Nube</span>
+        </div>
       </div>
 
     </div>
@@ -1482,9 +1488,21 @@
         <span class="text-cyan-400/90 font-semibold">PEPS · UEPS · Promedio Ponderado</span>
         <span>•</span>
         <button onclick="openFaqModal()" class="text-purple-300 hover:underline">8 Preguntas Frecuentes</button>
+        <span>•</span>
+        <span class="text-emerald-400 font-semibold flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Firebase Firestore
+        </span>
       </div>
     </div>
   </footer>
+
+  <!-- Firebase SDKs Compat (Compatibles con file:/// y HTTP sin bundlers ni problemas de CORS) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Configuración de Base de Datos Cloud Firestore (contapaso-d2dad) -->
+  <script src="./js/firebase-config.js"></script>
 
   <!-- Application Logic (Universal Standard Script, Compatible con file:/// y HTTP) -->
   <script src="./js/contapaso.js"></script>

@@ -1507,8 +1507,11 @@ window.guardarEjercicioActualEnHistorial = function(manual = false) {
       totalSalidas
     };
     guardarHistorialStorage(historial);
+    if (typeof window.guardarHistorialFirestore === 'function') {
+      window.guardarHistorialFirestore(ultimo);
+    }
     if (manual) {
-      window.mostrarToastNotificacion("¡Taller actualizado en tu historial local!");
+      window.mostrarToastNotificacion(window.isFirebaseReady ? "¡Taller actualizado en tu historial y en la nube!" : "¡Taller actualizado en tu historial local!");
     }
     return;
   }
@@ -1542,9 +1545,12 @@ window.guardarEjercicioActualEnHistorial = function(manual = false) {
   if (historial.length > 50) historial.pop(); // Mantener los 50 más recientes
 
   guardarHistorialStorage(historial);
+  if (typeof window.guardarHistorialFirestore === 'function') {
+    window.guardarHistorialFirestore(nuevoItem);
+  }
 
   if (manual) {
-    window.mostrarToastNotificacion("¡Taller guardado en tu historial local!");
+    window.mostrarToastNotificacion(window.isFirebaseReady ? "¡Taller guardado en tu historial y en la nube!" : "¡Taller guardado en tu historial local!");
   }
 };
 
@@ -1996,6 +2002,35 @@ function initApp() {
       if (e.target.id === 'history-modal') window.closeHistoryModal();
     });
   }
+
+  // Sincronización en segundo plano con Cloud Firestore
+  setTimeout(async () => {
+    if (typeof window.obtenerHistorialFirestore === 'function') {
+      try {
+        const cloudItems = await window.obtenerHistorialFirestore();
+        if (cloudItems && cloudItems.length > 0) {
+          const locales = obtenerHistorial();
+          const idsLocales = new Set(locales.map(l => l.id));
+          let nuevos = 0;
+          cloudItems.forEach(ci => {
+            if (!idsLocales.has(ci.id)) {
+              locales.push(ci);
+              idsLocales.add(ci.id);
+              nuevos++;
+            }
+          });
+          if (nuevos > 0) {
+            locales.sort((a, b) => new Date(b.fechaISO || 0) - new Date(a.fechaISO || 0));
+            localStorage.setItem(HISTORIAL_STORAGE_KEY, JSON.stringify(locales));
+            window.actualizarBadgeHistorial();
+            console.log(`ContaPaso: ${nuevos} talleres sincronizados desde Firebase Firestore.`);
+          }
+        }
+      } catch (e) {
+        console.warn("ContaPaso: Sincronización inicial Firestore:", e);
+      }
+    }
+  }, 1000);
 }
 
 if (document.readyState === 'loading') {
