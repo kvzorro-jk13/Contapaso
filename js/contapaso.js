@@ -1591,6 +1591,147 @@ window.limpiarTodoElHistorial = function() {
   }
 };
 
+window.exportarHistorialExcel = function() {
+  const historial = obtenerHistorial();
+  if (historial.length === 0) {
+    alert("No tienes ejercicios en tu historial para exportar.");
+    return;
+  }
+
+  // BOM UTF-8 (\uFEFF) para que Excel abra con acentos y caracteres especiales sin distorsión
+  let csvContent = "\uFEFF";
+
+  csvContent += "CONTAPASO - HISTORIAL DIDÁCTICO DE KARDEX E INVENTARIOS\n";
+  csvContent += `Reporte generado el:;${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}\n`;
+  csvContent += `Total de ejercicios registrados:;${historial.length}\n\n`;
+
+  // Encabezados de la tabla resumen compatible con Microsoft Excel (delimitador ;)
+  csvContent += "N°;Fecha y Hora;Nombre del Taller;Sistema Contable;Método Valuación;N° Operaciones;Costo de Ventas ($);Inventario Final ($);Unidades Finales (u);Mercancía Disponible ($)\n";
+
+  historial.forEach((item, index) => {
+    const num = index + 1;
+    const fecha = `"${item.fechaFormateada || item.fechaISO || ''}"`;
+    const titulo = `"${(item.titulo || 'Taller de Kardex').replace(/"/g, '""')}"`;
+    const sistema = item.sistema === 'periodico' ? "Inventario Periódico" : "Kardex Permanente";
+    const metodo = (item.metodo || 'peps').toUpperCase();
+    const cantOps = item.operaciones ? item.operaciones.length : 0;
+    const cv = item.resumen?.costoVentas || 0;
+    const ifVal = item.resumen?.inventarioFinalValor || 0;
+    const ifUnids = item.resumen?.inventarioFinalUnidades || 0;
+    const disp = cv + ifVal;
+
+    csvContent += `${num};${fecha};${titulo};${sistema};${metodo};${cantOps};${cv};${ifVal};${ifUnids};${disp}\n`;
+  });
+
+  // Sección de desglose de operaciones de cada taller
+  csvContent += "\n\n=======================================================\n";
+  csvContent += "DESGLOSE DE OPERACIONES REGISTRADAS POR EJERCICIO\n";
+  csvContent += "=======================================================\n";
+
+  historial.forEach((item, index) => {
+    csvContent += `\nEJERCICIO #${index + 1}: ${item.titulo} (${(item.metodo || '').toUpperCase()} - ${item.sistema === 'periodico' ? 'Periódico' : 'Permanente'})\n`;
+    csvContent += `Fecha: ${item.fechaFormateada} | Costo de Ventas: $ ${item.resumen?.costoVentas || 0} | Inventario Final: $ ${item.resumen?.inventarioFinalValor || 0}\n`;
+    csvContent += "Op N°;Tipo;Fecha;Detalle;Cantidad (u);Costo Unitario ($);Total ($)\n";
+
+    if (item.operaciones && item.operaciones.length > 0) {
+      item.operaciones.forEach((op, opIdx) => {
+        const opNum = opIdx + 1;
+        const tipo = (op.tipo || '').toUpperCase();
+        const opFecha = `"${op.fecha || ''}"`;
+        const detalle = `"${(op.detalle || '').replace(/"/g, '""')}"`;
+        const cant = op.cantidad || 0;
+        const cu = op.tipo === 'venta' ? 'Calculado en Kardex' : (op.costoUnitario || 0);
+        const tot = op.tipo === 'venta' ? 'Descargado en Salida' : (cant * (op.costoUnitario || 0));
+
+        csvContent += `${opNum};${tipo};${opFecha};${detalle};${cant};${cu};${tot}\n`;
+      });
+    }
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fechaStr = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `ContaPaso_Historial_Excel_${fechaStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  window.mostrarToastNotificacion("¡Historial descargado en formato Excel (.csv)!");
+};
+
+window.exportarKardexActualExcel = function() {
+  if (!window.AppState.operations || window.AppState.operations.length === 0) {
+    alert("No hay operaciones registradas para exportar.");
+    return;
+  }
+
+  let result;
+  if (window.AppState.system === 'periodico') {
+    result = calculatePeriodico(window.AppState.operations, window.AppState.method);
+  } else if (window.AppState.method === 'peps') {
+    result = calculatePEPS(window.AppState.operations);
+  } else if (window.AppState.method === 'ueps') {
+    result = calculateUEPS(window.AppState.operations);
+  } else {
+    result = calculatePromedio(window.AppState.operations);
+  }
+
+  let csvContent = "\uFEFF";
+  const titulo = window.AppState.ultimoTitulo || "Taller de Kardex";
+  const metodo = window.AppState.method.toUpperCase();
+  const sistema = window.AppState.system === 'periodico' ? "Inventario Periódico" : "Kardex Permanente";
+
+  csvContent += `CONTAPASO - TARJETA KARDEX\n`;
+  csvContent += `Taller:;${titulo}\n`;
+  csvContent += `Sistema:;${sistema}\n`;
+  csvContent += `Método de Valuación:;${metodo}\n`;
+  csvContent += `Fecha de exportación:;${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}\n\n`;
+
+  if (window.AppState.system === 'permanente') {
+    csvContent += "Fecha;Detalle;ENTRADAS Cantidad;ENTRADAS C.Unitario;ENTRADAS Total;SALIDAS Cantidad;SALIDAS C.Unitario;SALIDAS Total;SALDOS Cantidad;SALDOS Total\n";
+
+    result.kardex.forEach(row => {
+      const f = `"${row.fecha}"`;
+      const d = `"${row.detalle.replace(/"/g, '""')}"`;
+      const eQ = row.entrada.cantidad || '';
+      const eCU = row.entrada.costoUnitario || '';
+      const eT = row.entrada.total || '';
+      const sQ = row.salida.cantidad || '';
+      const sCU = row.salida.costoUnitario ? Math.round(row.salida.costoUnitario) : '';
+      const sT = row.salida.total || '';
+      const salQ = row.saldo.cantidad;
+      const salT = row.saldo.total;
+
+      csvContent += `${f};${d};${eQ};${eCU};${eT};${sQ};${sCU};${sT};${salQ};${salT}\n`;
+    });
+
+    csvContent += `\n;;;;;;;TOTAL COSTO DE VENTAS:;${result.costoVentasTotal}\n`;
+    csvContent += `;;;;;;;INVENTARIO FINAL:;${result.inventarioFinalValor}\n`;
+  } else {
+    csvContent += "ESTADO DE COSTO DE VENTAS (SISTEMA PERIÓDICO)\n";
+    csvContent += `(+) Inventario Inicial:;${result.invInicial.valor};(${result.invInicial.unidades} u)\n`;
+    csvContent += `(+) Compras Netas:;${result.comprasNetas.valor};(${result.comprasNetas.unidades} u)\n`;
+    csvContent += `(=) Mercancía Disponible:;${result.mercanciaDisponible.valor};(${result.mercanciaDisponible.unidades} u)\n`;
+    csvContent += `(-) Inventario Final:;${result.invFinal.valor};(${result.invFinal.unidades} u)\n`;
+    csvContent += `(=) COSTO DE VENTAS:;${result.costoVentas}\n`;
+  }
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ContaPaso_Kardex_${metodo}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  window.mostrarToastNotificacion("¡Kardex exportado a Excel exitosamente!");
+};
+
 window.exportarHistorialJSON = function() {
   const historial = obtenerHistorial();
   if (historial.length === 0) {
