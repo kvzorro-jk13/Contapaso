@@ -551,9 +551,9 @@ window.goToStep = function(stepNumber) {
     const navBtn = document.getElementById(`nav-step-${i}`);
     if (navBtn) {
       if (i === stepNumber) {
-        navBtn.className = "px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 text-white transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-cyan-300/40 flex items-center gap-1.5";
+        navBtn.className = "px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 text-white transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-cyan-300/40 flex items-center gap-1";
       } else {
-        navBtn.className = "px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-cyan-300 hover:bg-surface-container-high/80 transition-colors flex items-center gap-1.5";
+        navBtn.className = "px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-cyan-300 hover:bg-surface-container-high/80 transition-colors flex items-center gap-1";
       }
     }
   }

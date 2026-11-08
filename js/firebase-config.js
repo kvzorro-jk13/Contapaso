@@ -53,12 +53,12 @@ function actualizarIndicadorNube(conectado) {
   const badge = document.getElementById('cloud-status-badge');
   if (badge) {
     if (conectado) {
-      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-300">Nube Activa</span>';
-      badge.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-mono font-bold shadow-sm";
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-300 hidden lg:inline">Nube</span>';
+      badge.className = "flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-mono font-bold shadow-sm shrink-0";
       badge.title = "Conectado a Firebase Firestore (contapaso-d2dad)";
     } else {
-      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span class="text-cyan-300">Modo Local</span>';
-      badge.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-mono font-bold";
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span class="text-cyan-300 hidden lg:inline">Local</span>';
+      badge.className = "flex items-center gap-1 px-2 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-mono font-bold shrink-0";
       badge.title = "Operando con almacenamiento local del navegador";
     }
   }
